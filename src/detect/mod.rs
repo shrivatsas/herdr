@@ -63,10 +63,11 @@ pub enum Agent {
     Qodercli,
     Qwen,
     Maki,
+    Omnigent,
 }
 
 impl Agent {
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 23] = [
         Self::Pi,
         Self::Claude,
         Self::Codex,
@@ -89,9 +90,10 @@ impl Agent {
         Self::Qodercli,
         Self::Qwen,
         Self::Maki,
+        Self::Omnigent,
     ];
 
-    pub const SCREEN_MANIFEST_AGENTS: [Self; 20] = [
+    pub const SCREEN_MANIFEST_AGENTS: [Self; 21] = [
         Self::Pi,
         Self::Claude,
         Self::Codex,
@@ -112,6 +114,7 @@ impl Agent {
         Self::Qodercli,
         Self::Qwen,
         Self::Maki,
+        Self::Omnigent,
     ];
 }
 
@@ -139,6 +142,7 @@ pub fn agent_label(agent: Agent) -> &'static str {
         Agent::Qodercli => "qodercli",
         Agent::Qwen => "qwen",
         Agent::Maki => "maki",
+        Agent::Omnigent => "omnigent",
     }
 }
 
@@ -172,6 +176,7 @@ pub fn interactive_agent_executable(agent: Agent) -> &'static str {
         Agent::Qodercli => "qodercli",
         Agent::Qwen => "qwen",
         Agent::Maki => "maki",
+        Agent::Omnigent => "omnigent",
     }
 }
 
@@ -209,6 +214,7 @@ fn lookup_agent(name: &str) -> Option<Agent> {
         "qodercli" | "qoderclicn" | "qoder" | "qodercn" => Some(Agent::Qodercli),
         "qwen" | "qwen-code" | "qwen code" => Some(Agent::Qwen),
         "maki" => Some(Agent::Maki),
+        "omnigent" | "omni" => Some(Agent::Omnigent),
         _ => None,
     }
 }
@@ -804,6 +810,7 @@ mod tests {
             (Agent::Qodercli, "qodercli"),
             (Agent::Qwen, "qwen"),
             (Agent::Maki, "maki"),
+            (Agent::Omnigent, "omnigent"),
         ];
         assert_eq!(expected.len(), Agent::ALL.len());
         for (agent, executable) in expected {
@@ -946,6 +953,61 @@ mod tests {
             identify_agent_in_job(&job),
             Some((Agent::Hermes, "hermes".to_string()))
         );
+    }
+
+    #[test]
+    fn identify_agent_in_job_detects_python_wrapped_omnigent_via_homebrew_alias() {
+        let job = crate::platform::ForegroundJob {
+            process_group_id: 123,
+            processes: vec![foreground_process(
+                123,
+                "Python",
+                &["Python", "/opt/homebrew/bin/omni"],
+            )],
+        };
+
+        assert_eq!(
+            identify_agent_in_job(&job),
+            Some((Agent::Omnigent, "omnigent".to_string()))
+        );
+    }
+
+    #[test]
+    fn identify_agent_in_job_detects_python_wrapped_omnigent_via_venv_entry_point() {
+        let job = crate::platform::ForegroundJob {
+            process_group_id: 123,
+            processes: vec![foreground_process(
+                123,
+                "Python",
+                &["Python", "/some/venv/bin/omnigent"],
+            )],
+        };
+
+        assert_eq!(
+            identify_agent_in_job(&job),
+            Some((Agent::Omnigent, "omnigent".to_string()))
+        );
+    }
+
+    #[test]
+    fn identify_agent_in_job_ignores_arbitrary_python_scripts() {
+        for argv in [
+            vec!["python3", "/tmp/my_script.py"],
+            vec!["Python", "/opt/homebrew/bin/some-other-tool"],
+            vec!["python3.12", "/some/venv/bin/omnigent-lookalike"],
+            vec!["python3"],
+        ] {
+            let job = crate::platform::ForegroundJob {
+                process_group_id: 123,
+                processes: vec![foreground_process(123, argv[0], &argv)],
+            };
+
+            assert_eq!(
+                identify_agent_in_job(&job),
+                None,
+                "expected no agent for python argv {argv:?}"
+            );
+        }
     }
 
     #[test]
