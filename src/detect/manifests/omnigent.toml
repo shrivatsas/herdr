@@ -1,0 +1,20 @@
+id = "omnigent"
+version = "2026.08.20.1"
+min_engine_version = 2
+updated_at = "2026-08-20T00:00:00Z"
+
+[[rules]]
+id = "status_footer_working"
+state = "working"
+priority = 200
+region = "bottom_non_empty_lines(5)"
+visible_working = true
+contains = ["/help help", "· streaming"]
+
+[[rules]]
+id = "status_footer_idle"
+state = "idle"
+priority = 100
+region = "bottom_non_empty_lines(5)"
+visible_idle = true
+contains = ["/help help", "· ready"]

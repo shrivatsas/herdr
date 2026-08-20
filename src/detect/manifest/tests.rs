@@ -360,6 +360,31 @@ fn devin_manifest_detects_idle_working_and_blocked_states() {
 }
 
 #[test]
+fn omnigent_manifest_detects_idle_and_working_status_footer() {
+    let idle = explain(
+        Agent::Omnigent,
+        "  Try asking Bo to spawn the following sub-agents!\n  Claude → Subscription   ·   Gemini → not configured\n   ·   Codex → Subscription   ·   Pi → 🔑 OpenRouter\nAPI Key\n\n\n─────────────────────────────────────────────────────\n ❯\n─────────────────────────────────────────────────────\n── Bo · ready  /help help · Ctrl+O debug · Ctrl+T sho",
+    );
+    assert_eq!(idle.state, AgentState::Idle);
+    assert_eq!(
+        idle.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+        Some("status_footer_idle")
+    );
+    assert!(idle.visible_idle);
+
+    let working = explain(
+        Agent::Omnigent,
+        "  Try asking Bo to spawn the following sub-agents!\n  Claude → Subscription   ·   Gemini → not configured\n   ·   Codex → Subscription   ·   Pi → 🔑 OpenRouter\nAPI Key\n\n\n─────────────────────────────────────────────────────\n ❯\n─────────────────────────────────────────────────────\n── Bo · streaming… 13s  /help help · Ctrl+O debug · C",
+    );
+    assert_eq!(working.state, AgentState::Working);
+    assert_eq!(
+        working.matched_rule.as_ref().map(|rule| rule.id.as_str()),
+        Some("status_footer_working")
+    );
+    assert!(working.visible_working);
+}
+
+#[test]
 fn manifest_validation_rejects_unknown_fields_empty_rules_invalid_regions_and_regexes() {
     assert!(parse_manifest(
         r#"
