@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Added
+- Herdr now identifies Omnigent sessions launched via their Python-wrapped `omni`/`omnigent` entry points as a first-class Omnigent agent kind, surfacing them in the agent list, sidebar, and `herdr agent explain`.
 - CLI help now points coding agents to Herdr's plain-text guide, documentation index, and built-in control skill.
 - Added Qwen Code detection for idle, working, and user-confirmation states, plus optional native session restore. (#2730, #2743)
 - Herdr now keeps the outer terminal window title in sync with the session through `ui.window_title`, so window managers and terminal tab bars show the active workspace and the host the panes actually run on. (#2627, thanks @dhh)
