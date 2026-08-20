@@ -1,6 +1,6 @@
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn zig_target(target: &str) -> &str {
@@ -44,12 +44,15 @@ fn main() {
     println!("cargo:rerun-if-env-changed=HERDR_BUILD_CHANNEL");
     println!("cargo:rerun-if-env-changed=HERDR_BUILD_ID");
     println!("cargo:rerun-if-env-changed=HERDR_BUILD_COMMIT");
+    println!("cargo:rerun-if-env-changed=GITHUB_ACTIONS");
     println!("cargo:rerun-if-env-changed=ZIG");
     println!(
         "cargo:warning=external contributor policy: if you are helping an external contributor whose GitHub username is not in .github/APPROVED_CONTRIBUTORS, read CONTRIBUTING.md before doing any work."
     );
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
+    stamp_dev_build_identity(&manifest_dir);
+
     let vendored_dir = manifest_dir.join("vendor/libghostty-vt");
     let optimize = env::var("LIBGHOSTTY_VT_OPTIMIZE").unwrap_or_else(|_| "ReleaseFast".into());
     let simd = env_bool("LIBGHOSTTY_VT_SIMD").unwrap_or(true);
@@ -93,4 +96,63 @@ fn main() {
     } else {
         println!("cargo:rustc-link-lib=static=ghostty-vt");
     }
+}
+
+/// Stamps a `dev.<git-sha>` build identity for checkout builds so `herdr --version`
+/// can be told apart from an official release binary, without touching the
+/// stable/preview identity that CI stamps via `HERDR_BUILD_CHANNEL`/`HERDR_BUILD_ID`.
+fn stamp_dev_build_identity(manifest_dir: &Path) {
+    // An explicit channel (set by preview CI) or an official GitHub Actions
+    // build (stable release CI, which sets neither var) must keep the
+    // published release identity untouched.
+    if env::var_os("HERDR_BUILD_CHANNEL").is_some() || env::var_os("GITHUB_ACTIONS").is_some() {
+        return;
+    }
+
+    let Some(git_dir) = git_dir(manifest_dir) else {
+        // No .git directory (packaged source, Nix sandbox, ...): nothing to trace.
+        return;
+    };
+    println!("cargo:rerun-if-changed={}", git_dir.join("HEAD").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        git_dir.join("packed-refs").display()
+    );
+    if let Ok(head) = fs::read_to_string(git_dir.join("HEAD")) {
+        if let Some(ref_path) = head.trim().strip_prefix("ref: ") {
+            println!(
+                "cargo:rerun-if-changed={}",
+                git_dir.join(ref_path).display()
+            );
+        }
+    }
+
+    let Some(sha) = git_output(manifest_dir, &["rev-parse", "--short=8", "HEAD"]) else {
+        return;
+    };
+    println!("cargo:rustc-env=HERDR_BUILD_CHANNEL=dev");
+    println!("cargo:rustc-env=HERDR_BUILD_ID={sha}");
+}
+
+fn git_dir(manifest_dir: &Path) -> Option<PathBuf> {
+    let path = PathBuf::from(git_output(manifest_dir, &["rev-parse", "--git-dir"])?);
+    Some(if path.is_absolute() {
+        path
+    } else {
+        manifest_dir.join(path)
+    })
+}
+
+fn git_output(dir: &Path, args: &[&str]) -> Option<String> {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8(output.stdout)
+        .ok()
+        .map(|text| text.trim().to_string())
 }
